@@ -1,0 +1,33 @@
+{
+    "net name": "$4N783",
+    "type": "OT_Net",
+    "full length": "22.162313999999995mm",
+    "extent": "N/A",
+    "layer gap": 2.6820000000000004,
+    "trace layer": [
+        "Layer 5 : 13.135063",
+        "Layer 1 : 2.996174",
+        "Layer 5 : 2.641968",
+        "Layer 1 : 0.707109"
+    ],
+    "electrical net": [
+        {
+            "net name": "$4N781^^^",
+            "type": "OT_ElectricalNet",
+            "full length": "24.592705999999996mm",
+            "extent": "N/A",
+            "child nets": [
+                "$4N781",
+                "$4N783"
+            ],
+            "layer gap": 3.5760000000000005,
+            "trace layer": [
+                "Layer 1 : 1.536392",
+                "Layer 5 : 13.135063",
+                "Layer 1 : 2.996174",
+                "Layer 5 : 2.641968",
+                "Layer 1 : 0.707109"
+            ]
+        }
+    ]
+}
