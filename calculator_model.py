@@ -8,7 +8,6 @@ class Net:
         name=None,
         com=None,
         obj_type=None,
-        extent=None,
         net_cm=None,
         trace_length: list = None,
         layer_gaps=None,
@@ -18,7 +17,6 @@ class Net:
         self.com = com
         self.cm = net_cm
         self.type = obj_type
-        self.extent = extent
         self.elect_net = None
         self.trace_length = trace_length  # list
         self.trace_per_layer = []
@@ -106,7 +104,6 @@ class Net:
             "net name": self.name,
             "type": self.type,
             "full length": f"{self.length}",
-            "extent": self.extent if self.extent else "N/A",
             "layer gap": self.layer_gaps if self.layer_gaps else 0,
             "trace layer": [
                 f"{layer}" " : " f"{length}" for layer, length in self.trace_per_layer
@@ -169,7 +166,6 @@ class ElecNet(Net):
                 "net name": self.name,
                 "type": self.type,
                 "full length": f"{self.length}",
-                "extent": self.extent if self.extent else "N/A",
                 "layer gap": self.layer_gaps if self.layer_gaps else 0,
                 "trace layer": [f"{layer}" " : " f"{length}" for layer, length in self.trace_per_layer],
                 "child nets":  {child_net.name: child_net.to_dict() for child_net in self.child_nets},
@@ -185,7 +181,6 @@ class ChildNet(Net):
                 "net name": self.name,
                 "type": self.type,
                 "full length": f"{self.length}",
-                "extent": self.extent if self.extent else "N/A",
                 "layer gap": self.layer_gaps if self.layer_gaps else 0,
                 "trace layer": [f"{layer}" " : " f"{length}" for layer, length in self.trace_per_layer],
             }
@@ -308,7 +303,16 @@ class NetLengthCalculator(XpeditionManager):
         nets_list = self.get_nets_dic()
         return json.dumps(nets_list, indent=4, ensure_ascii=False)
 
+class LayoutApp:
+    def __init__(self):
+        pass
 
+    def send_to_pyqt_gui(self, net_info):
+        # PyQt GUI로 네트 객체 정보 전송
+        json_data = json.dumps(net_info)
+        # 네트워크 통신 등을 통해 PyQt GUI로 전송
+        send_data_to_pyqt_gui(json_data)
+        
 def main():
     NetLengthCalculatorModel = NetLengthCalculator()
     result = NetLengthCalculatorModel.get_selected_nets()

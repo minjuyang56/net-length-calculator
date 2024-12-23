@@ -10,8 +10,7 @@
         "Layer 5 : 2.641968",
         "Layer 1 : 0.707109"
     ],
-    "electrical net": [
-        {
+    "electrical net": {
             "net name": "$4N781^^^",
             "type": "OT_ElectricalNet",
             "full length": "24.592705999999996mm",
@@ -29,5 +28,4 @@
                 "Layer 1 : 0.707109"
             ]
         }
-    ]
 }
