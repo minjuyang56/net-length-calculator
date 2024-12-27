@@ -8,13 +8,13 @@
 <img src="https://github.com/user-attachments/assets/76bb436c-2e2e-46cd-a7d5-413be9c67d21"  width="200"/>
 
 ### 1. 프로젝트 실행 흐름
-<img src="https://github.com/user-attachments/assets/98a0e445-0ce0-44cc-ba4c-cd381581066b" width="600" />
+<img src="https://github.com/user-attachments/assets/98a0e445-0ce0-44cc-ba4c-cd381581066b" width="700" />
 
 ### 2. `main.py` 실행 시 화면
 <img src="https://github.com/user-attachments/assets/ab0d0ab4-6ca4-427b-9602-6072ddef332d" width="500" />
 
 ### 3. 네트 객체 더블 클릭 시 화면
-<img src="https://github.com/user-attachments/assets/3c35639f-6f1b-4e77-bf74-166956277615" width="400"/>
+<img src="https://github.com/user-attachments/assets/3c35639f-6f1b-4e77-bf74-166956277615" width="300"/>
 
 ## 사용 방법
 
