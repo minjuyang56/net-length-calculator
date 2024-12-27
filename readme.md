@@ -5,16 +5,17 @@
 이 프로젝트는 PCB 설계에서 네트(Trace)의 길이를 계산하고 시각화하는 도구입니다. `main.py`를 실행하여 GUI 환경에서 트레이스의 길이를 측정하고 비교할 수 있으며, Xpedition 앱과의 연동을 통해 실시간으로 네트를 선택하고 반영할 수 있습니다.
 \n
 ## 프로젝트 구조
+<img src="https://user-images.githubusercontent.com/51365114/119627750-716f3100-be47-11eb-8e83-686b23c2c161.png  width="200" height="400"/>
 ![image](https://github.com/user-attachments/assets/76bb436c-2e2e-46cd-a7d5-413be9c67d21)
 
 ### 1. 프로젝트 실행 흐름
-![Flow](https://github.com/user-attachments/assets/98a0e445-0ce0-44cc-ba4c-cd381581066b)
+<img src="https://github.com/user-attachments/assets/98a0e445-0ce0-44cc-ba4c-cd381581066b" width="200" height="400"/>
 
 ### 2. `main.py` 실행 시 화면
-![Main.py 실행 화면](https://github.com/user-attachments/assets/ab0d0ab4-6ca4-427b-9602-6072ddef332d)
+<img src="https://github.com/user-attachments/assets/ab0d0ab4-6ca4-427b-9602-6072ddef332d" width="200" height="400"/>
 
 ### 3. 네트 객체 더블 클릭 시 화면
-![Net 더블 클릭 화면](https://github.com/user-attachments/assets/3c35639f-6f1b-4e77-bf74-166956277615)
+<img src="https://github.com/user-attachments/assets/3c35639f-6f1b-4e77-bf74-166956277615" width="200" height="400"/>
 
 ## 사용 방법
 
