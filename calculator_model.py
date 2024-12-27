@@ -1,6 +1,5 @@
 import json
 from xpedition_manager import XpeditionManager
-from win32com.client import gencache
 
 class Net:
     def __init__(
@@ -12,6 +11,7 @@ class Net:
         trace_length: list = None,
         layer_gaps=None,
         length=None,
+        from_to = None
     ):
         self.name = name
         self.com = com
@@ -23,6 +23,7 @@ class Net:
         self.trace_extremas = []
         self.layer_gaps = layer_gaps
         self.length = length
+        self.from_to = from_to
 
     def _net_type_cm(self):
         net_type_cm = self.cm.ObjectType
@@ -59,7 +60,7 @@ class Net:
         self.com = net_com
         self.cm = design_cm.GetNets(15).Item(self.com.Name)
         self.type = self._net_type_cm()
-        if self.type == "OT_ElectricalNet":  # 일렉넷이면 한번더가서 그냥 네트로 바꿔줌
+        if self.type == "OT_ElectricalNet":  # 일렉넷이면 한번 더 가서 그냥 네트로 바꿔줌
             self.cm = self.cm.Objects.Item(1)
             self.type = self._net_type_cm()
         self.trace_length = self.get_trace_length()
@@ -74,6 +75,7 @@ class Net:
             self.layer_gaps = 0
         self.trace_per_layer = self.get_trace_per_layer()
         self.length = self.trace_length + self.layer_gaps
+        # self.from_to = self.net_com.from_to
         # self.extent = (net_com.Extrema.MaxX, net_com.Extrema.MaxY), (net_com.Extrema.MinX, net_com.Extrema.MinY)
 
     def new_elect_net(self):  
@@ -110,7 +112,10 @@ class Net:
             ],
             "electrical net": self.elect_net.to_dict()
         }
-
+    
+class FromTO:
+    def __init__(self):
+        pass
 
 class ElecNet(Net):
     def __init__(self):
@@ -253,11 +258,24 @@ class LayerStackup:
             prelayer = trace_layers_names[i]
         return layer_gap_sum
 
+from pcb_event_handler import PCBEventHandler
+from PyQt5.QtCore import QObject, pyqtSignal
 
-class NetLengthCalculator(XpeditionManager):
+class NetLengthCalculator(XpeditionManager, QObject):
+    signal_to_gui = pyqtSignal() # pcb object -> GUI
+
     def __init__(self):
-        self.initialize_pcb()
+        # 부모 클래스 초기화
+        XpeditionManager.__init__(self)  # XpeditionManager 초기화
+        QObject.__init__(self)  # QObject 초기화
 
+        self.initialize_pcb()
+        self.set_event_handler(self.pcb_doc, PCBEventHandler)
+        self.pcb_dispatched_event_com.signal_from_event_handler.connect(self.emit_to_gui) # event_handler -> pcb object
+
+    def emit_to_gui(self):
+        # PCB 앱 -> GUI에 전파
+        self.signal_to_gui.emit()
 
     def _load_design_cm(self):
         self.design = self.constraints_auto.Design
@@ -302,21 +320,13 @@ class NetLengthCalculator(XpeditionManager):
     def get_nets_json(self):
         nets_list = self.get_nets_dic()
         return json.dumps(nets_list, indent=4, ensure_ascii=False)
-
-class LayoutApp:
-    def __init__(self):
-        pass
-
-    def send_to_pyqt_gui(self, net_info):
-        # PyQt GUI로 네트 객체 정보 전송
-        json_data = json.dumps(net_info)
-        # 네트워크 통신 등을 통해 PyQt GUI로 전송
-        send_data_to_pyqt_gui(json_data)
+    
         
 def main():
     NetLengthCalculatorModel = NetLengthCalculator()
     result = NetLengthCalculatorModel.get_selected_nets()
     print(NetLengthCalculatorModel.get_nets_json())
+    
 
 if __name__ == "__main__":
     main()

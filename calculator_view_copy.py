@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QListWidget, QTableWidget, QTableWidgetItem, QSplitter, QDialog, QTreeWidget, QTreeWidgetItem
 )
 from PyQt5.QtGui import QDrag
-from PyQt5.QtCore import Qt, QMimeData
+from PyQt5.QtCore import Qt, QMimeData, pyqtSlot
 
 class NetDetailsDialog(QDialog):
     def __init__(self, net):
@@ -61,9 +61,10 @@ class RefNet(QLabel):
         self.parent.update_net_length_diff()
 
 class NetViewer(QWidget):
-    def __init__(self):
+    def __init__(self, cal):
         super().__init__()
-        self.net_calculator = NetLengthCalculator()
+        self.net_calculator = cal
+        self.net_calculator.signal_to_gui.connect(self.change_net_dic_slot)
         self.net_dic = self.net_calculator.get_nets_dic()
 
         self.unit_label = QLabel(f"Unit: {self.net_calculator.get_current_unit()}") 
@@ -81,6 +82,13 @@ class NetViewer(QWidget):
         self.initial_setting()
         self.set_props()
     
+    @pyqtSlot()
+    def change_net_dic_slot(self):
+        self.clear_table()
+        self.nets_list_widget.clear()
+        self.net_dic = self.net_calculator.get_nets_dic()
+        self.populate_net_list()
+
     def initial_setting(self):
         self.setWindowTitle("Net Viewer GUI")
         self.setGeometry(100, 100, 1200, 600)
@@ -123,7 +131,7 @@ class NetViewer(QWidget):
         
         for item in selected_items:
             net_name = item.text()
-            net = self.get_net_by_name(net_name) # net 딕셔너리에서 net_name으로로 찾기 
+            net = self.get_net_by_name(net_name) # net 딕셔너리에서 net_name으로 찾기 
             if net:
                 row_position = self.nets_table_widget.rowCount()
                 self.nets_table_widget.insertRow(row_position)
@@ -213,7 +221,7 @@ class NetViewer(QWidget):
         if net:
             details_dialog = NetDetailsDialog(net)
             details_dialog.exec_()
-
+    
     def populate_net_list(self):
         for net in self.net_dic:
             self.nets_list_widget.addItem(net["net name"])
