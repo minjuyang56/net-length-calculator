@@ -3,7 +3,7 @@
 ## 프로젝트 개요
 
 이 프로젝트는 PCB 설계에서 네트(Trace)의 길이를 계산하고 시각화하는 도구입니다. `main.py`를 실행하여 GUI 환경에서 트레이스의 길이를 측정하고 비교할 수 있으며, Xpedition 앱과의 연동을 통해 실시간으로 네트를 선택하고 반영할 수 있습니다.
-
+\n
 ## 프로젝트 구조
 ![image](https://github.com/user-attachments/assets/76bb436c-2e2e-46cd-a7d5-413be9c67d21)
 
