@@ -316,25 +316,16 @@ class ComponentConnectionCalculator:
         self.comp_set = []
         self.comp_pin_pair = []
 
-    def _get_pin_str(self):
-        if not self.comp_set:
-            return 
-        
-        counter = Counter([pin.Name for pin in self.net.com.Pins])
-
-        # comp_set의 개수와 일치하는 개수의 핀을 찾기
-        pin_str = [key for key, value in counter.items() if value == len(self.comp_set)] # 컴포넌트 세트는 잘 들어오는 듯 
-
-        try:
-            return pin_str[0]
-        except Exception as e:
-            print('invalid Topology, you have to chose Daisy chain shape')
-            return None
-
-    def get_comp_pin_pair(self):
+    def _get_pin(self, comp): # 그니까 컴포넌트, 네트 정해진 상태에서 핀 찾기  그 핀중에서 parent가 comp set인 것 찾으면 될듯듯
+        for pin in self.net.com.Pins:
+            if pin.Parent.Name == comp.Name:
+                return comp.FindPin(pin.Name)
+     
+    def get_comp_pin_pair(self): # 컴포넌트를 정했으면 그 컴포넌트가 어느 핀과 (이미 선택한) 네트와 연결되는지 그 핀을 찾는 알고리즘 
         comp_pin_pair = []
-        for comp in self.comp_set:
-            comp_pin_pair.append((comp, comp.FindPin(self._get_pin_str())))
+
+        for comp in self.comp_set: 
+            comp_pin_pair.append((comp, self._get_pin(comp)))
         return comp_pin_pair
     
     def get_comp_set(self, comp_set_txt, pcb_doc): # 사용자가 고른 comp_set 텍스트 받아서 
@@ -354,11 +345,16 @@ class ComponentConnectionCalculator:
                 return pin
         
     def trace_length(self, pin1, pin2, pcb_doc):
-        length = 0.0
+        length = '-' # 해당 컴포넌트와 선택한 네트가 연결된게 없을 때
+        cnt = 0
         # 두 핀 사이의 객체들을 가져옵니다.
-        objs = pcb_doc.ObjectsInBetween(pin1, pin2)
+        if pin1 and pin2:
+            objs = pcb_doc.ObjectsInBetween(pin1, pin2)
+            cnt = objs.Count
+            
         # 컬렉션이 비어 있으면 두 핀 사이에 물리적인 연결이 없음을 의미합니다.
-        if objs.Count > 0:
+        if cnt > 0:
+            length = 0.0
             # 두 핀 사이의 모든 객체를 순회하며 길이를 합산합니다.
             for i in range(1, objs.Count + 1):  # VBScript의 1-based index를 고려
                 obj = objs.Item(i)
@@ -370,14 +366,18 @@ class ComponentConnectionCalculator:
                         length = float(f"{length:.2f}")
                         
         return length
-
         
     def set_props(self, net, ref_comp_txt, comp_set_txt, pcb_doc):
         self.net = net
         self.comp_set = self.get_comp_set(comp_set_txt, pcb_doc) # 아마도 얘네 둘 순서도 맞을거임 
         self.ref_comp = self.get_ref_comp(ref_comp_txt, pcb_doc)
-        self.comp_pin_pair = self.get_comp_pin_pair()
         self.ref_pin = self.get_ref_pin()
+        self.comp_pin_pair = self.get_comp_pin_pair()
+
+    def set_comp_pin_pair(self, net):
+        self.net = net
+        self.ref_pin = self.get_ref_pin()
+        self.comp_pin_pair = self.get_comp_pin_pair()
 
 from pcb_event_handler import PCBEventHandler
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -463,6 +463,7 @@ class NetLengthCalculator(XpeditionManager, QObject):
         return json.dumps(nets_list, indent=4, ensure_ascii=False)
 
 def main():
+
     NetLengthCalculatorModel = NetLengthCalculator()
     result = NetLengthCalculatorModel.get_selected_nets()
     print(NetLengthCalculatorModel.get_nets_json())

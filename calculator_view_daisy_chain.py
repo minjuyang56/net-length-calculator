@@ -2,11 +2,10 @@ from collections import defaultdict
 import sys
 from calculator_model import NetLengthCalculator
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QCheckBox, QComboBox, QDialogButtonBox,
-    QListWidget, QTableWidget, QTableWidgetItem, QSplitter, QToolButton, QDialog, QTreeWidget, QTreeWidgetItem, QMessageBox
+    QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QComboBox, QDialogButtonBox,
+    QListWidget, QSizePolicy, QTableWidget, QTableWidgetItem, QToolButton, QDialog, QTreeWidget, QTreeWidgetItem, QMessageBox
 )
-from PyQt5.QtGui import QDrag, QMovie, QCursor
-from PyQt5.QtCore import QTimer, Qt, QMimeData, pyqtSlot
+from PyQt5.QtCore import Qt, pyqtSlot
 
 class ComponentSettingDialog(QDialog):
     def __init__(self, component_list, parent=None):
@@ -18,7 +17,7 @@ class ComponentSettingDialog(QDialog):
         self.layout = QVBoxLayout(self)
 
         # Ref Component
-        self.ref_component_label = QLabel("Ref Component:")
+        self.ref_component_label = QLabel("Ref Component: ")
         self.ref_component_combo = QComboBox()
         self.ref_component_combo.addItems(component_list)
         self.layout.addWidget(self.ref_component_label)
@@ -79,25 +78,6 @@ class NetDetailsDialog(QDialog):
                 prop_item.setText(0, key)
                 prop_item.setText(1, str(value))
 
-class RefNet(QLabel):
-    def __init__(self, title, parent, content):
-        super().__init__(title, parent)
-        self.setAcceptDrops(True)
-        self.parent = parent 
-        self.content = content
-
-    def dragEnterEvent(self, e):
-        if e.mimeData().hasFormat('text/plain') and self.content=='Net':
-            self.setStyleSheet('background-color: yellow;')
-            e.accept()
-        else:
-            e.ignore()
-    
-    def dropEvent(self, e):
-        self.setStyleSheet('background-color: none;')  # 배경색 초기화
-        self.setText('Ref '+ str(self.content) + ': ' + e.mimeData().text())
-        self.parent.update_net_length_diff()
-
 class DaisyNetViewer(QWidget):
     def __init__(self, cal):
         super().__init__()
@@ -109,22 +89,27 @@ class DaisyNetViewer(QWidget):
         # 프로퍼티 설정
         self.table_nets = []
         self.table_fromto = defaultdict(dict) # table[net_name][comp]
+        self.ref_net_location = None
 
         # 버튼
-        self.ref_net_button = RefNet('Ref Net: Drop Ref Net here.', self, 'Net')
-        self.ref_comp_button = RefNet('Ref Comp:', self, 'Comp')
+        self.ref_net_label = QLabel('Ref Net: Double click a net in the table.')
+        self.ref_comp_label = QLabel('Ref Comp:')
         self.component_setting_button = QPushButton("Component Setting")
         self.fix_toggle = QToolButton()
         self.fix_toggle.setText("Fix Nets")
         self.fix_toggle.setCheckable(True)  # 토글 가능한 상태로 설정
         self.fix_toggle.setChecked(False)   # 초기 상태는 비활성화
         self.fix_toggle.setStyleSheet("font-size: 12px;")  # 텍스트 크기 설정
-        self.refresh_button = QPushButton("Refresh")
-        self.refresh_button.setFixedSize(80, 30)  # 버튼 크기 설정
+        self.difference_button = QPushButton("Toggle Difference")
+        self.difference_button.setCheckable(True)  # 토글 가능하도록 설정
+        self.update_button = QPushButton("Update")
+        self.update_button.setFixedSize(80, 30)  # 버튼 크기 설정
+        self.unit_label = QLabel(f"Unit: {self.net_calculator.get_current_unit()}") 
         self._connect_logic_to_buttons()
         
         # 테이블
         self.nets_table_widget = QTableWidget()
+        self.nets_table_widget.cellDoubleClicked.connect(self.on_cell_double_clicked)
         self.widget = QWidget()
         self.layout = QHBoxLayout(self)  
         
@@ -135,6 +120,9 @@ class DaisyNetViewer(QWidget):
     def event_occured_in_pcb_app(self):
         if not self.fix_toggle.isChecked():  # fix_toggle은 fix 토글을 나타내는 QWidget
             self._set_table_nets()
+            self.ref_net_location = None
+            self.ref_net_label.setText('Ref Net: Double click a net in the table.')
+            self.ref_comp_label.setText('Ref Comp:')
         # 넷 길이 수정중...
     
     def initial_setting(self):
@@ -151,23 +139,17 @@ class DaisyNetViewer(QWidget):
     def _set_initial_nets_table_widget(self):
         self.nets_table_widget.setColumnCount(1)
         self.nets_table_widget.setHorizontalHeaderLabels(["Net Name"])
-
-        self.nets_table_widget.setDragEnabled(True)
-        self.nets_table_widget.setAcceptDrops(True)
-        self.nets_table_widget.setDragDropMode(QTableWidget.DragDrop)  # InternalMove → DragDrop
-        self.nets_table_widget.setDefaultDropAction(Qt.MoveAction)  # 기본 드롭 액션
-
-        self.nets_table_widget.cellPressed.connect(self.start_drag)
     
     def _set_layout(self):
         layout = QVBoxLayout() # 세로 3칸칸
 
         # ref 결정하는 세로 레이아웃
         ref_layout = QVBoxLayout()
-        ref_layout.addWidget(self.ref_net_button)
+        ref_layout.addWidget(self.ref_net_label)
         ref_comp_layout = QHBoxLayout()
-        ref_comp_layout.addWidget(self.ref_comp_button)
+        ref_comp_layout.addWidget(self.ref_comp_label)
         ref_comp_layout.addWidget(self.component_setting_button)
+        ref_comp_layout.addStretch()
         ref_layout.addLayout(ref_comp_layout)
 
         # 수평 레이아웃에 버튼 추가
@@ -176,14 +158,19 @@ class DaisyNetViewer(QWidget):
         top_button_layout.addStretch()
         top_button_layout.addWidget(self.fix_toggle)    
 
-        # 리프레시 버튼
-        refresh_layout = QHBoxLayout()
-        refresh_layout.addStretch()  # 왼쪽에 여백 추가
-        refresh_layout.addWidget(self.refresh_button)
+        # 업데이트 버튼
+        update_layout = QHBoxLayout()
+        update_layout.addStretch()  # 왼쪽에 여백 추가
+        update_layout.addWidget(self.difference_button)
+        update_layout.addWidget(self.update_button)
+
+        bottom_button_layout = QHBoxLayout() 
+        bottom_button_layout.addWidget(self.unit_label)
+        bottom_button_layout.addLayout(update_layout) 
 
         layout.addLayout(top_button_layout)  # 수평 레이아웃 추가
         layout.addWidget(self.nets_table_widget)
-        layout.addLayout(refresh_layout) # 리프레시는 초기상태 그 fromto 길이로 리프레시시
+        layout.addLayout(bottom_button_layout) # 리프레시는 초기상태 그 fromto 길이로 리프레시시
         self.widget.setLayout(layout)
 
         self.layout.addWidget(self.widget)
@@ -197,7 +184,9 @@ class DaisyNetViewer(QWidget):
         
         for i, net in enumerate(self.table_nets):
             self.nets_table_widget.insertRow(row_position + i)
-            self.nets_table_widget.setItem(row_position + i, 0, QTableWidgetItem(net.name))
+            item = QTableWidgetItem(net.name)
+            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+            self.nets_table_widget.setItem(row_position + i, 0, item)
 
     def _set_table_fromto(self): # 얘는 처음 한번만 실행되고, 데이터 가져오는건 추상화되어있어야됨됨
         # 컬럼 세팅
@@ -212,7 +201,10 @@ class DaisyNetViewer(QWidget):
         for i, net in enumerate(self.table_nets):
             for j, comp in enumerate(comp_set, start=1): # 컴포넌트 세트의 갯수만큼 돌림               
                 length_item = QTableWidgetItem(str(self.table_fromto[net.name][comp.Name]))
+                length_item.setTextAlignment(Qt.AlignCenter) 
                 self.nets_table_widget.setItem(i, j, length_item)
+        
+        self.change_background(self.ref_net_location)
 
     def show_warning(self, message):
             """
@@ -226,41 +218,56 @@ class DaisyNetViewer(QWidget):
             msg.setStandardButtons(QMessageBox.Ok)
             msg.exec_()
 
-    def start_drag(self, row, column):
-        """셀을 드래그할 때 호출됩니다."""
-        item = self.nets_table_widget.item(row, column)
-        if not item:
-            return
+    def on_cell_double_clicked(self, row, column):                
+        self.ref_net_location = (row, column)
+        self.ref_net_label.setText('Ref Net' + ': ' + self.nets_table_widget.item(row, 0).text())
+        self.change_background((row, column))
 
-        drag = QDrag(self)
-        mime_data = QMimeData()
-        mime_data.setText(item.text())
-        drag.setMimeData(mime_data)
-        drag.exec_(Qt.MoveAction)
+    def change_background(self, ref_net_location):
+        if not ref_net_location:
+            return 
+        
+        for i in range(self.nets_table_widget.rowCount()):
+            for j in range(self.nets_table_widget.columnCount()):
+                item = self.nets_table_widget.item(i, j)
+                if item:
+                    item.setBackground(Qt.white)  # Reset all cells to white
 
-    def dropEvent(self, e):
-        if e.mimeData().hasText():
-            text = e.mimeData().text()
-            print(f"Dropped text: {text}")
-            e.accept()
-        else:
-            e.ignore()
+        for j in range(self.nets_table_widget.columnCount()):
+            item = self.nets_table_widget.item(ref_net_location[0], j)
+            if item:
+                item.setBackground(Qt.yellow)  # Highlight the row
 
     def _connect_logic_to_buttons(self): # set_props에서 호출됨됨
         self.component_setting_button.clicked.connect(self.open_component_setting)
-        self.refresh_button.clicked.connect(self.refresh_data)
+        self.difference_button.toggled.connect(self.toggle_difference)
+        self.update_button.clicked.connect(self.update_data)
+    
+    def toggle_difference(self, checked):
+        if checked:
+            self.update_net_length_diff()
+            self.change_background(self.ref_net_location)
+        else:
+            self._set_table_fromto()
+            self.change_background(self.ref_net_location)
     
     def open_component_setting(self):
         try:
-            component_name_list = [comp.Name for comp in self.table_nets[0].get_connected_comps()]
+            component_name_list = []
+            for net in self.table_nets:
+                component_name_list.extend([comp.Name for comp in net.get_connected_comps()])
+            component_name_list = sorted(list(set(component_name_list)))
+
             dialog = ComponentSettingDialog(component_name_list, self)
             if dialog.exec_() == QDialog.Accepted:
                 ref_component, component_set = dialog.get_selection() # U21 ['U27', 'U26', 'U28', 'U29'] str list
                 for net in self.table_nets:
                     self.net_calculator.comp_connection_cal.set_props(net, ref_component, component_set, self.net_calculator.pcb_doc) # 여기서 핀 페어 완성해줌
                     self.table_fromto[net.name] = self.net_calculator.get_connection_table()
+                self.ref_net_location = None
                 self._set_table_fromto() # 무조건 여기서만 등장
-                self.ref_comp_button.setText('Ref Comp: ' + ref_component)
+                self.ref_comp_label.setText('Ref Comp: ' + ref_component)
+                self.ref_net_label.setText('Ref Net: Double click a net in the table.')
         except IndexError:
             # IndexError 발생 시 경고창 표시
             self.show_warning("No nets are selected. Please select a net first.")
@@ -268,8 +275,29 @@ class DaisyNetViewer(QWidget):
             # 기타 예상치 못한 오류 처리
             self.show_warning(f"An unexpected error occurred: {str(e)}")
     
-    def refresh_data(self): 
-        self._set_table_fromto()
+    def update_data(self): 
+        if self.table_fromto:
+            for net in self.table_nets:
+                self.net_calculator.comp_connection_cal.set_comp_pin_pair(net)
+                self.table_fromto[net.name] = self.net_calculator.get_connection_table()
+
+                # 표 length 데이터 세팅
+                comp_set = self.net_calculator.comp_connection_cal.comp_set
+                if not comp_set:
+                    self.show_warning('Set component first.')
+                else:
+                    for i, net in enumerate(self.table_nets):
+                        for j, comp in enumerate(comp_set, start=1): # 컴포넌트 세트의 갯수만큼 돌림               
+                            length_item = QTableWidgetItem(str(self.table_fromto[net.name][comp.Name]))
+                            length_item.setTextAlignment(Qt.AlignCenter) 
+                            self.nets_table_widget.setItem(i, j, length_item)
+                    self.change_background(self.ref_net_location)
+                    
+                    if self.difference_button.isChecked():
+                        self.update_net_length_diff()
+                        self.change_background(self.ref_net_location)
+        else:
+            self.show_warning('Set components first.')
 
     def get_net_by_name(self, name):
         for net in self.table_nets:
@@ -278,8 +306,8 @@ class DaisyNetViewer(QWidget):
         return None  
     
     def update_net_length_diff(self):
-        if 'Ref Net: ' in self.ref_net_button.text():
-            ref_net_name = self.ref_net_button.text().replace('Ref Net: ', '').strip()
+        if 'Ref Net: ' in self.ref_net_label.text():
+            ref_net_name = self.ref_net_label.text().replace('Ref Net: ', '').strip()
             ref_net = self.get_net_by_name(ref_net_name)
             
             if ref_net:
@@ -293,16 +321,21 @@ class DaisyNetViewer(QWidget):
                 # 기준행 데이터 저장장
                 ref_row_data = [
                         float(self.nets_table_widget.item(ref_net_row, col).text()) 
-                        if self.nets_table_widget.item(ref_net_row, col) else 0.0
+                        if self.nets_table_widget.item(ref_net_row, col).text() != '-' else '-'
                         for col in range(1, self.nets_table_widget.columnCount())
                     ]
-
                 comp_set = self.net_calculator.comp_connection_cal.comp_set
                 # 표 length 데이터 세팅
                 for i, net in enumerate(self.table_nets):
                     for j, comp in enumerate(comp_set, start=1): # 컴포넌트 세트의 갯수만큼 돌림림  
-                        difference = round(float(self.nets_table_widget.item(i, j).text()) - ref_row_data[j-1], 2)          
-                        length_item = QTableWidgetItem(str(difference))
+                        difference = '-'
+                        ref_item = ref_row_data[j-1]
+                        dest_item = self.nets_table_widget.item(i, j).text()
+                        if ref_item != '-' and dest_item != '-':
+                            difference = round(float(dest_item) - ref_item, 2)  
+                            difference = str(difference)        
+                        length_item = QTableWidgetItem(difference)
+                        length_item.setTextAlignment(Qt.AlignCenter)
                         self.nets_table_widget.setItem(i, j, length_item)  
                                    
 if __name__ == "__main__":

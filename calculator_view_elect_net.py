@@ -276,7 +276,7 @@ class NetViewer(QWidget):
                 return net
         return None
 
-    def _set_top_buttons(self): # set_props에서 호출됨됨
+    def _set_top_buttons(self): # set_props에서 호출됨
         self.sort_ascending_button.clicked.connect(self.sort_ascending)  # 오름차순 정렬 함수 연결
         self.sort_descending_button.clicked.connect(self.sort_descending)  # 내림차순 정렬 함수 연결
         self.component_setting_button.clicked.connect(self.open_component_setting)
