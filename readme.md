@@ -10,11 +10,18 @@
 ### 1. 프로젝트 실행 흐름
 <img src="https://github.com/user-attachments/assets/98a0e445-0ce0-44cc-ba4c-cd381581066b" width="700" />
 
-### 2. `main.py` 실행 시 화면
+### 2-1. `elect_net_length_main.py` 실행 시 화면
 <img src="https://github.com/user-attachments/assets/ab0d0ab4-6ca4-427b-9602-6072ddef332d" width="500" />
 
-### 3. 네트 객체 더블 클릭 시 화면
+### 2-2. 네트 객체 더블 클릭 시 화면
 <img src="https://github.com/user-attachments/assets/3c35639f-6f1b-4e77-bf74-166956277615" width="300"/>
+
+### 3-1. `daisy_chain_length_main.py` 실행 시 화면
+
+<img src="https://github.com/user-attachments/assets/21dece20-ff13-4693-a9b1-791e829ee815" width="500" />
+
+### 3-2. Reference net 선택 시 화면
+<img src="https://github.com/user-attachments/assets/3087745d-ee85-4574-9761-d6cffedba889" width="300"/>
 
 ## 사용 방법
 
