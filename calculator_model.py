@@ -2,28 +2,18 @@ import json
 from xpedition_manager import XpeditionManager
 
 class Net:
-    def __init__(
-        self,
-        name=None,
-        com=None,
-        obj_type=None,
-        net_cm=None,
-        trace_length: list = None,
-        layer_gaps=None,
-        length=None,
-        from_to = None
-    ):
-        self.name = name
-        self.com = com
-        self.cm = net_cm
-        self.type = obj_type
+    def __init__(self):
+        self.name = None
+        self.com = None
+        self.cm = None
+        self.type = None
         self.elect_net = None
-        self.trace_length = trace_length  # list
+        self.trace_length = None  # list
         self.trace_per_layer = []
         self.trace_extremas = []
-        self.layer_gaps = layer_gaps
-        self.length = length
-        self.from_to = from_to
+        self.layer_gaps = None
+        self.length = None
+        self.connected_comps = []
 
     def _net_type_cm(self):
         net_type_cm = self.cm.ObjectType
@@ -33,6 +23,10 @@ class Net:
             return "OT_Net"
         elif net_type_cm == 26:  # OT_ConstraintClass (일렉넷의 부모)
             return "OT_ConstraintClass"
+        elif net_type_cm == 50:
+            return "OT_FromTo"
+        elif net_type_cm == 48:
+            return "OT_PinPair"
         else:
             return net_type_cm
 
@@ -55,11 +49,25 @@ class Net:
             trace_extremas.append(((trace_extrema.MinX, trace_extrema.MinY), (trace_extrema.MaxX, trace_extrema.MaxY)))
         return trace_extremas
 
+    def get_passing_components(self):
+        passing_comps = []
+        for connection in self.com.Connections:
+            print(connection)
+
+    def get_connected_comps(self):
+        connected_comps = []
+        for pin in self.com.Pins:
+            comp = pin.Parent
+            connected_comps.append(comp)
+        return connected_comps
+
     def set_props(self, net_com, design_cm, pcb_doc):  
         self.name = net_com.Name
         self.com = net_com
         self.cm = design_cm.GetNets(15).Item(self.com.Name)
         self.type = self._net_type_cm()
+        self.connected_comps = self.get_connected_comps()
+        
         if self.type == "OT_ElectricalNet":  # 일렉넷이면 한번 더 가서 그냥 네트로 바꿔줌
             self.cm = self.cm.Objects.Item(1)
             self.type = self._net_type_cm()
@@ -75,9 +83,7 @@ class Net:
             self.layer_gaps = 0
         self.trace_per_layer = self.get_trace_per_layer()
         self.length = self.trace_length + self.layer_gaps
-        # self.from_to = self.net_com.from_to
-        # self.extent = (net_com.Extrema.MaxX, net_com.Extrema.MaxY), (net_com.Extrema.MinX, net_com.Extrema.MinY)
-
+       
     def new_elect_net(self):  
         self.elect_net = ElecNet()
 
@@ -113,10 +119,6 @@ class Net:
             "electrical net": self.elect_net.to_dict()
         }
     
-class FromTO:
-    def __init__(self):
-        pass
-
 class ElecNet(Net):
     def __init__(self):
         super().__init__()
@@ -128,11 +130,12 @@ class ElecNet(Net):
     def get_child_nets(self, design_cm, pcb_doc):  
         child_nets = []
         for child_net_cm in self.cm.GetObjects():
-            child_net = ChildNet()
-            child_net.set_props(
-                pcb_doc.GetNets(sNetName=child_net_cm.Name).Item(1), design_cm, pcb_doc
-            )
-            child_nets.append(child_net)
+            if child_net_cm.ObjectType == 49:
+                child_net = ChildNet()
+                child_net.set_props(
+                    pcb_doc.GetNets(sNetName=child_net_cm.Name).Item(1), design_cm, pcb_doc
+                )
+                child_nets.append(child_net)
         return child_nets
 
     def get_trace_length(self):  
@@ -165,6 +168,18 @@ class ElecNet(Net):
         for child_net in self.child_nets:
             trace_per_layer.extend(child_net.trace_per_layer)
         return trace_per_layer
+    
+    def find_minimum_tolerance(self, net_name, match_group_mask):
+        oTolerance = (2 ** 15) - 1  # 최대 정수값 32767로 초기화
+
+        # 매치 그룹 순회
+        for oMatchGroup in self.MatchGroups(match_group_mask):
+            oConstraint = oMatchGroup.Constraints.FindItem("CT_MatchGroupTolerance")
+            if oConstraint is not None:
+                if oTolerance > oConstraint.Value:
+                    oTolerance = oConstraint.Value
+
+        return oTolerance
 
     def to_dict(self):
         return {
@@ -234,7 +249,8 @@ class LayerStackup:
             nets_com
         )  # ex) ['SIGNAL_1', 'SIGNAL_2', 'SIGNAL_3', 'SIGNAL_2']
         layer_gap_sum = 0
-        prelayer = trace_layers_names[0]
+        if len(trace_layers_names):
+            prelayer = trace_layers_names[0]
         for i in range(1, len(trace_layers_names)):
             if prelayer != trace_layers_names[i]:
                 if self.whole_stackup_pcb_names.index(
@@ -257,6 +273,111 @@ class LayerStackup:
                     )
             prelayer = trace_layers_names[i]
         return layer_gap_sum
+    
+class Component:
+    def __init__(
+        self,
+        name=None,
+        com=None,
+        obj_type=None,
+        net_cm=None,
+        trace_length: list = None,
+        layer_gaps=None,
+        length=None,
+        from_to = None
+    ):
+        self.name = name
+        self.com = com
+        self.cm = net_cm
+        self.type = obj_type
+        self.elect_net = None
+        self.trace_length = trace_length  # list
+        self.trace_per_layer = []
+        self.trace_extremas = []
+        self.layer_gaps = layer_gaps
+        self.length = length
+        self.from_to = from_to
+
+import math
+from collections import Counter, defaultdict
+
+# 이거는 특정 네트와 그 네트가 지나가는 컴포넌트들의 연결 정보를를 계산하는 클래스
+# 기준 컴포넌트 ~ 컴포넌트1 길이
+# 기준 컴포넌트 ~ 컴포넌트2 길이
+# 기준 컴포넌트 ~ 컴포넌트3 길이
+# 기준 컴포넌트 ~ 컴포넌트4 길이
+# 이런것 계산해줌
+
+class ComponentConnectionCalculator:
+    def __init__(self):
+        self.net = None
+        self.ref_comp = None
+        self.ref_pin = None
+        self.comp_set = []
+        self.comp_pin_pair = []
+
+    def _get_pin_str(self):
+        if not self.comp_set:
+            return 
+        
+        counter = Counter([pin.Name for pin in self.net.com.Pins])
+
+        # comp_set의 개수와 일치하는 개수의 핀을 찾기
+        pin_str = [key for key, value in counter.items() if value == len(self.comp_set)] # 컴포넌트 세트는 잘 들어오는 듯 
+
+        try:
+            return pin_str[0]
+        except Exception as e:
+            print('invalid Topology, you have to chose Daisy chain shape')
+            return None
+
+    def get_comp_pin_pair(self):
+        comp_pin_pair = []
+        for comp in self.comp_set:
+            comp_pin_pair.append((comp, comp.FindPin(self._get_pin_str())))
+        return comp_pin_pair
+    
+    def get_comp_set(self, comp_set_txt, pcb_doc): # 사용자가 고른 comp_set 텍스트 받아서 
+        comp_set = []
+        for comp_txt in comp_set_txt:
+            comp = pcb_doc.FindComponent(comp_txt)
+            comp_set.append(comp)
+        return comp_set
+    
+    def get_ref_comp(self, ref_comp_txt, pcb_doc):
+        ref_comp = pcb_doc.FindComponent(ref_comp_txt)
+        return ref_comp
+    
+    def get_ref_pin(self): # ref 컴포넌트의 선택한 net랑 연결되는 핀을 찾아야됨 
+        for pin in self.net.com.Pins:
+            if pin.Parent.Name == self.ref_comp.Name:
+                return pin
+        
+    def trace_length(self, pin1, pin2, pcb_doc):
+        length = 0.0
+        # 두 핀 사이의 객체들을 가져옵니다.
+        objs = pcb_doc.ObjectsInBetween(pin1, pin2)
+        # 컬렉션이 비어 있으면 두 핀 사이에 물리적인 연결이 없음을 의미합니다.
+        if objs.Count > 0:
+            # 두 핀 사이의 모든 객체를 순회하며 길이를 합산합니다.
+            for i in range(1, objs.Count + 1):  # VBScript의 1-based index를 고려
+                obj = objs.Item(i)
+                # 도체 층에 있는 객체인지 확인
+                if obj.ObjectClass == 2:
+                    # 객체가 트레이스인지 확인
+                    if obj.Type == 524288:
+                        length += float(f"{obj.Length:.2f}")
+                        length = float(f"{length:.2f}")
+                        
+        return length
+
+        
+    def set_props(self, net, ref_comp_txt, comp_set_txt, pcb_doc):
+        self.net = net
+        self.comp_set = self.get_comp_set(comp_set_txt, pcb_doc) # 아마도 얘네 둘 순서도 맞을거임 
+        self.ref_comp = self.get_ref_comp(ref_comp_txt, pcb_doc)
+        self.comp_pin_pair = self.get_comp_pin_pair()
+        self.ref_pin = self.get_ref_pin()
 
 from pcb_event_handler import PCBEventHandler
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -272,6 +393,7 @@ class NetLengthCalculator(XpeditionManager, QObject):
         self.initialize_pcb()
         self.set_event_handler(self.pcb_doc, PCBEventHandler)
         self.pcb_dispatched_event_com.signal_from_event_handler.connect(self.emit_to_gui) # event_handler -> pcb object
+        self.comp_connection_cal = ComponentConnectionCalculator()
 
     def emit_to_gui(self):
         # PCB 앱 -> GUI에 전파
@@ -290,6 +412,8 @@ class NetLengthCalculator(XpeditionManager, QObject):
     def get_selected_nets(self):
         self._load_design_cm()
         selected_nets_com = self.pcb_doc.GetNets(1)
+        if not selected_nets_com:
+            print('please select nets')
         selected_nets = []
 
         for net_com in selected_nets_com:
@@ -300,6 +424,23 @@ class NetLengthCalculator(XpeditionManager, QObject):
             selected_nets.append(net)
         self._unload_design_cm()
         return selected_nets
+    
+    def get_net_by_name(self, net_name):
+        selected_nets = self.get_selected_nets()
+        for net in selected_nets:
+            if net_name == net.name:
+                return net
+    
+    def get_connection_table(self): # 특정 넷 하나에 대해서만 한 줄 채우는 것
+        temp = defaultdict(dict)
+        for comp, pin in self.comp_connection_cal.comp_pin_pair:
+            temp[comp.Name] = self.comp_connection_cal.trace_length(self.comp_connection_cal.ref_pin, pin, self.pcb_doc)
+        temp = dict(temp)
+        return temp
+
+    def get_component_connection_length(self, net_name, component):
+        connection_table = self.get_connection_table()
+        return connection_table[net_name][component.Name]    
 
     def get_current_unit(self):
         current_unit = self.pcb_doc.CurrentUnit
@@ -320,13 +461,17 @@ class NetLengthCalculator(XpeditionManager, QObject):
     def get_nets_json(self):
         nets_list = self.get_nets_dic()
         return json.dumps(nets_list, indent=4, ensure_ascii=False)
-    
-        
+
 def main():
     NetLengthCalculatorModel = NetLengthCalculator()
     result = NetLengthCalculatorModel.get_selected_nets()
     print(NetLengthCalculatorModel.get_nets_json())
-    
 
+def test():
+    NetLengthCalculatorModel = NetLengthCalculator()
+    selected_nets = NetLengthCalculatorModel.get_selected_nets()
+    lengths = []
+    print(NetLengthCalculatorModel.get_connection_table(selected_nets[0].name))
 if __name__ == "__main__":
-    main()
+    # main()
+    test()

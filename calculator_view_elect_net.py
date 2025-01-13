@@ -1,12 +1,49 @@
+from collections import defaultdict
 import sys
 from calculator_model import NetLengthCalculator
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, 
+    QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QComboBox, QDialogButtonBox,
     QListWidget, QTableWidget, QTableWidgetItem, QSplitter, QDialog, QTreeWidget, QTreeWidgetItem
 )
-from PyQt5.QtGui import QDrag
-from PyQt5.QtCore import Qt, QMimeData, pyqtSlot
+from PyQt5.QtGui import QDrag, QMovie, QCursor
+from PyQt5.QtCore import QTimer, Qt, QMimeData, pyqtSlot
 
+class ComponentSettingDialog(QDialog):
+    def __init__(self, component_list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Component Setting")
+        self.setGeometry(200, 200, 400, 300)
+        self.selected_components = []
+
+        self.layout = QVBoxLayout(self)
+
+        # Ref Component
+        self.ref_component_label = QLabel("Ref Component:")
+        self.ref_component_combo = QComboBox()
+        self.ref_component_combo.addItems(component_list)
+        self.layout.addWidget(self.ref_component_label)
+        self.layout.addWidget(self.ref_component_combo)
+
+        # Component Set
+        self.component_set_label = QLabel("Component Set:")
+        self.component_set_list = QListWidget()
+        self.component_set_list.addItems(component_list)
+        self.component_set_list.setSelectionMode(QListWidget.MultiSelection)
+        self.layout.addWidget(self.component_set_label)
+        self.layout.addWidget(self.component_set_list)
+
+        # Confirm and Cancel buttons
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        self.layout.addWidget(self.buttons)
+
+    def get_selection(self): # ok를 눌러야지 실행됨
+        ref_component = self.ref_component_combo.currentText()
+        selected_items = self.component_set_list.selectedItems()
+        component_set = [item.text() for item in selected_items]
+        return ref_component, component_set
+    
 class NetDetailsDialog(QDialog):
     def __init__(self, net):
         super().__init__()
@@ -72,19 +109,24 @@ class NetViewer(QWidget):
         self.clear_button = QPushButton("Clear")
         self.sort_ascending_button = QPushButton("↗")  # 오름차순 버튼
         self.sort_descending_button = QPushButton("↘")  # 내림차순 버튼
+        self.component_setting_button = QPushButton("Component Setting")
         self.nets_table_widget = QTableWidget()
         self.ref_net_button = RefNet('Drop Ref Net here.', self)
         self.left_widget = QWidget()
         self.right_widget = QWidget()
         self.splitter = QSplitter(Qt.Horizontal)
         self.layout = QHBoxLayout(self)  
-
+        
         self.initial_setting()
         self.set_props()
-    
+
+        self.selected_items = None
+        self.connection_table = defaultdict(dict)
+
     @pyqtSlot()
     def change_net_dic_slot(self):
-        self.clear_table()
+        # self.clear_table()
+        self.nets_list_widget.clearSelection()
         self.nets_list_widget.clear()
         self.net_dic = self.net_calculator.get_nets_dic()
         self.populate_net_list()
@@ -108,7 +150,7 @@ class NetViewer(QWidget):
 
         self.populate_net_list()
 
-        self._set_sort_buttons()
+        self._set_top_buttons()
 
     def _set_layout(self):
         self.layout.addWidget(self.splitter)
@@ -123,13 +165,14 @@ class NetViewer(QWidget):
         self.nets_list_widget.itemSelectionChanged.connect(self.update_table)
 
     def update_table(self):
-        selected_items = self.nets_list_widget.selectedItems()
-        if not selected_items:
-            return
+        self.nets_table_widget.setColumnCount(3)
+        self.nets_table_widget.setHorizontalHeaderLabels(["Net Name", "Net Length", "Difference"])
+        self.selected_items = self.nets_list_widget.selectedItems()
+        if not self.selected_items:
+            return           
 
         self.nets_table_widget.setRowCount(0)  
-        
-        for item in selected_items:
+        for item in self.selected_items:
             net_name = item.text()
             net = self.get_net_by_name(net_name) # net 딕셔너리에서 net_name으로 찾기 
             if net:
@@ -148,8 +191,7 @@ class NetViewer(QWidget):
         self.clear_button.clicked.connect(self.clear_table)
 
     def clear_table(self):
-        self.nets_table_widget.setRowCount(0)  
-        self.nets_list_widget.clearSelection()
+        self.nets_table_widget.setRowCount(0) 
 
     def _set_left_widget(self):
         left_layout = QVBoxLayout()
@@ -199,16 +241,18 @@ class NetViewer(QWidget):
         right_layout = QVBoxLayout()
 
         # 수평 레이아웃에 버튼 추가
-        sort_button_layout = QHBoxLayout()
-        sort_button_layout.addWidget(self.ref_net_button)
-        sort_button_layout.addWidget(self.sort_ascending_button)
-        sort_button_layout.addWidget(self.sort_descending_button)
+        top_button_layout = QHBoxLayout()
+        top_button_layout.addWidget(self.ref_net_button)
+        top_button_layout.addWidget(self.sort_ascending_button)
+        top_button_layout.addWidget(self.sort_descending_button)
+        top_button_layout.addWidget(self.component_setting_button)
+
 
         # 정렬 버튼 크기 설정 (작은 정사각형으로)
         self.sort_ascending_button.setFixedSize(30, 30)
         self.sort_descending_button.setFixedSize(30, 30)
 
-        right_layout.addLayout(sort_button_layout)  # 수평 레이아웃 추가
+        right_layout.addLayout(top_button_layout)  # 수평 레이아웃 추가
         right_layout.addWidget(self.nets_table_widget)
         self.right_widget.setLayout(right_layout)
         
@@ -232,15 +276,60 @@ class NetViewer(QWidget):
                 return net
         return None
 
-    def _set_sort_buttons(self):
+    def _set_top_buttons(self): # set_props에서 호출됨됨
         self.sort_ascending_button.clicked.connect(self.sort_ascending)  # 오름차순 정렬 함수 연결
         self.sort_descending_button.clicked.connect(self.sort_descending)  # 내림차순 정렬 함수 연결
+        self.component_setting_button.clicked.connect(self.open_component_setting)
 
     def sort_ascending(self):
         self.nets_table_widget.sortItems(0, Qt.AscendingOrder)
 
     def sort_descending(self):
         self.nets_table_widget.sortItems(0, Qt.DescendingOrder)
+    
+    def open_component_setting(self):
+        component_list = ["U21", "U26", "U27", "U28", "U29"]  # 예제용 컴포넌트 리스트
+        dialog = ComponentSettingDialog(component_list, self)
+        if dialog.exec_() == QDialog.Accepted:
+            ref_component, component_set = dialog.get_selection() # U21 ['U27', 'U26', 'U28', 'U29'] str list
+            # selected_items = self.nets_list_widget.selectedItems()  
+            # print('selected_item', selected_items)     
+
+            # 여기 반복문에서 시간이 너무 오래걸림...
+            for item in self.selected_items:
+                net_name = item.text()
+                net = self.net_calculator.get_net_by_name(net_name)
+                # 테이블 행 한줄 결정
+                self.net_calculator.comp_connection_cal.set_props(net, ref_component, component_set, self.net_calculator.pcb_doc) # 여기서 핀 페어 완성해줌
+                self.connection_table[net_name] = self.net_calculator.get_connection_table()
+   
+            self.update_connection_table()
+
+    def update_connection_table(self):
+        # selected_items = self.nets_list_widget.selectedItems()
+        if not self.selected_items:
+            return           
+
+        self.nets_table_widget.setRowCount(0)  
+        for item in self.selected_items:
+            net_name = item.text()
+            net = self.get_net_by_name(net_name) # net 딕셔너리에서 net_name으로 찾기 
+            if net:
+                row_position = self.nets_table_widget.rowCount()
+                self.nets_table_widget.insertRow(row_position)
+                
+                net_name_item = QTableWidgetItem(net_name)
+                self.nets_table_widget.setItem(row_position, 0, net_name_item)
+
+                comp_set = self.net_calculator.comp_connection_cal.comp_set
+                headers = ["Net Name"]
+                headers.extend([comp.Name for comp in comp_set])
+                self.nets_table_widget.setColumnCount(len(headers))  # 컬럼 개수 설정
+                self.nets_table_widget.setHorizontalHeaderLabels(headers)
+                self.nets_table_widget.horizontalHeader().setSectionsMovable(True)
+                for i, comp in enumerate(comp_set, start=1): # 컴포넌트 세트의 갯수만큼 돌림림
+                    length_item = QTableWidgetItem(str(self.connection_table[net_name][comp.Name]))
+                    self.nets_table_widget.setItem(row_position, i, length_item)
 
     def update_net_length_diff(self):
         if 'Ref Net: ' in self.ref_net_button.text():
@@ -269,11 +358,10 @@ class NetViewer(QWidget):
                                     length_item.setText(f"0")
                                 else:
                                     length_item.setText(f"{length_diff:.6f}")
-
-    def receive_from_pcb_app(self):
-        pass
+                                    
 
 if __name__ == "__main__":
+
     app = QApplication(sys.argv)
     viewer = NetViewer()
     viewer.show()
