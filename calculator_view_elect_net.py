@@ -1,12 +1,12 @@
 from collections import defaultdict
 import sys
 from calculator_model import NetLengthCalculator
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QComboBox, QDialogButtonBox,
     QListWidget, QTableWidget, QTableWidgetItem, QSplitter, QDialog, QTreeWidget, QTreeWidgetItem
 )
-from PyQt5.QtGui import QDrag, QMovie, QCursor
-from PyQt5.QtCore import QTimer, Qt, QMimeData, pyqtSlot
+from PySide6.QtGui import QDrag
+from PySide6.QtCore import Qt, QMimeData, Slot
 
 class ComponentSettingDialog(QDialog):
     def __init__(self, component_list, parent=None):
@@ -123,7 +123,7 @@ class NetViewer(QWidget):
         self.selected_items = None
         self.connection_table = defaultdict(dict)
 
-    @pyqtSlot()
+    @Slot()
     def change_net_dic_slot(self):
         # self.clear_table()
         self.nets_list_widget.clearSelection()

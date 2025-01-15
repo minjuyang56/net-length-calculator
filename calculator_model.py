@@ -75,9 +75,9 @@ class Net:
 
         if self.trace_length:
             self.trace_extremas = self.get_trace_extrema()
-            layer_stackup = LayerStackup()
-            layer_stackup.set_props(pcb_doc)
-            self.layer_gaps = layer_stackup.compute_layer_gap_between_traces([self.com])
+            self.layer_stackup = LayerStackup()
+            self.layer_stackup.set_props(pcb_doc)
+            self.layer_gaps = self.layer_stackup.compute_layer_gap_between_traces([self.com])
         else:
             self.trace_length = 0
             self.layer_gaps = 0
@@ -96,9 +96,9 @@ class Net:
         self.elect_net.trace_length = self.elect_net.get_trace_length()
 
         if self.trace_length:
-            layer_stackup = LayerStackup()
-            layer_stackup.set_props(pcb_doc)
-            self.elect_net.layer_gaps = layer_stackup.compute_layer_gap_between_traces(
+            self.layer_stackup = LayerStackup()
+            self.layer_stackup.set_props(pcb_doc)
+            self.elect_net.layer_gaps = self.layer_stackup.compute_layer_gap_between_traces(
                 self.elect_net.com
             )
         else:
@@ -274,6 +274,45 @@ class LayerStackup:
             prelayer = trace_layers_names[i]
         return layer_gap_sum
     
+    def _get_net_layers_list_objs(self, objs):
+        net_layers_names = []
+        for obj in objs:  # 한 네트의 트레이스들
+            if not obj:
+                return 
+            layer_obj = obj.Layer # 레이어가 0이 나올수도 있음????
+            layer_pcb = self.signal_stackup_pcb.Item(
+                layer_obj
+            )  # layer1 -> signal1 로 변환
+            if layer_pcb:
+                net_layers_names.append(layer_pcb.LayerProperties.StackupLayerName)
+
+        layer_gap_sum = 0
+        if len(net_layers_names):
+            prelayer = net_layers_names[0]
+        for i in range(1, len(net_layers_names)):
+            if prelayer != net_layers_names[i]:
+                if self.whole_stackup_pcb_names.index(
+                    prelayer
+                ) < self.whole_stackup_pcb_names.index(net_layers_names[i]):
+                    layer_gap_sum += sum(
+                        self.thicknesses[
+                            self.whole_stackup_pcb_names.index(prelayer)
+                            + 1 : self.whole_stackup_pcb_names.index(
+                                net_layers_names[i]
+                            )
+                        ]
+                    )
+                else:
+                    layer_gap_sum += sum(
+                        self.thicknesses[
+                            self.whole_stackup_pcb_names.index(net_layers_names[i])
+                            + 1 : self.whole_stackup_pcb_names.index(prelayer)
+                        ]
+                    )
+            prelayer = net_layers_names[i]
+
+        return layer_gap_sum
+    
 class Component:
     def __init__(
         self,
@@ -300,13 +339,6 @@ class Component:
 
 import math
 from collections import Counter, defaultdict
-
-# 이거는 특정 네트와 그 네트가 지나가는 컴포넌트들의 연결 정보를를 계산하는 클래스
-# 기준 컴포넌트 ~ 컴포넌트1 길이
-# 기준 컴포넌트 ~ 컴포넌트2 길이
-# 기준 컴포넌트 ~ 컴포넌트3 길이
-# 기준 컴포넌트 ~ 컴포넌트4 길이
-# 이런것 계산해줌
 
 class ComponentConnectionCalculator:
     def __init__(self):
@@ -344,11 +376,15 @@ class ComponentConnectionCalculator:
             if pin.Parent.Name == self.ref_comp.Name:
                 return pin
         
-    def trace_length(self, pin1, pin2, pcb_doc):
+    def trace_length(self, pin1, pin2, precision, pcb_doc):
         length = '-' # 해당 컴포넌트와 선택한 네트가 연결된게 없을 때
+        via_spans_sum = 0
+        to_see_objs = [] # 핀1, 트레이스, 핀2가 들어감 (나중에 레이어 번호를 기록하기 위해서 사용함)
         cnt = 0
         # 두 핀 사이의 객체들을 가져옵니다.
         if pin1 and pin2:
+            to_see_objs.append(pin1)
+            to_see_objs.append(pin2)
             objs = pcb_doc.ObjectsInBetween(pin1, pin2)
             cnt = objs.Count
             
@@ -362,10 +398,17 @@ class ComponentConnectionCalculator:
                 if obj.ObjectClass == 2:
                     # 객체가 트레이스인지 확인
                     if obj.Type == 524288:
-                        length += float(f"{obj.Length:.2f}")
-                        length = float(f"{length:.2f}")
-                        
-        return length
+                        to_see_objs.insert(-1, obj)
+                        length += float(f"{obj.Length:.{precision+1}f}")
+                        length = float(f"{length:.{precision+1}f}")
+            via_spans_sum = self.net.layer_stackup._get_net_layers_list_objs(to_see_objs)
+            
+        if via_spans_sum:
+            length += round(via_spans_sum, precision)
+
+        if length != '-':
+            length = round(length, precision)     
+        return length  
         
     def set_props(self, net, ref_comp_txt, comp_set_txt, pcb_doc):
         self.net = net
@@ -434,7 +477,7 @@ class NetLengthCalculator(XpeditionManager, QObject):
     def get_connection_table(self): # 특정 넷 하나에 대해서만 한 줄 채우는 것
         temp = defaultdict(dict)
         for comp, pin in self.comp_connection_cal.comp_pin_pair:
-            temp[comp.Name] = self.comp_connection_cal.trace_length(self.comp_connection_cal.ref_pin, pin, self.pcb_doc)
+            temp[comp.Name] = self.comp_connection_cal.trace_length(self.comp_connection_cal.ref_pin, pin, self.get_current_precision(), self.pcb_doc)
         temp = dict(temp)
         return temp
 
@@ -452,6 +495,10 @@ class NetLengthCalculator(XpeditionManager, QObject):
             return "mm"
         elif current_unit == 5:
             return "um"
+    
+    def get_current_precision(self):
+        current_precision = self.pcb_doc.GetDimensionScheme().Precision
+        return current_precision
         
     def get_nets_dic(self):
         selected_nets = self.get_selected_nets()
@@ -463,7 +510,6 @@ class NetLengthCalculator(XpeditionManager, QObject):
         return json.dumps(nets_list, indent=4, ensure_ascii=False)
 
 def main():
-
     NetLengthCalculatorModel = NetLengthCalculator()
     result = NetLengthCalculatorModel.get_selected_nets()
     print(NetLengthCalculatorModel.get_nets_json())
@@ -473,6 +519,7 @@ def test():
     selected_nets = NetLengthCalculatorModel.get_selected_nets()
     lengths = []
     print(NetLengthCalculatorModel.get_connection_table(selected_nets[0].name))
+
 if __name__ == "__main__":
     # main()
     test()

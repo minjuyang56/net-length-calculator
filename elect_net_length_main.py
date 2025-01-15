@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 from calculator_view_elect_net import NetViewer
 from calculator_view_daisy_chain import DaisyNetViewer
 from calculator_model import NetLengthCalculator

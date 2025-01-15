@@ -1,11 +1,12 @@
 from collections import defaultdict
 import sys
 from calculator_model import NetLengthCalculator
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QComboBox, QDialogButtonBox,
-    QListWidget, QSizePolicy, QTableWidget, QTableWidgetItem, QToolButton, QDialog, QTreeWidget, QTreeWidgetItem, QMessageBox
+    QListWidget, QTableWidget, QTableWidgetItem, QToolButton, QDialog, QTreeWidget, QTreeWidgetItem, QMessageBox
 )
-from PyQt5.QtCore import Qt, pyqtSlot
+from PySide6.QtCore import Qt, Slot
+from PySide6.QtGui import QIcon
 
 class ComponentSettingDialog(QDialog):
     def __init__(self, component_list, parent=None):
@@ -82,6 +83,8 @@ class DaisyNetViewer(QWidget):
     def __init__(self, cal):
         super().__init__()
 
+        self.setWindowIcon(QIcon("asset/pcb.png"))
+
         # cal 모델 객체 선언
         self.net_calculator = cal
         self.net_calculator.signal_to_gui.connect(self.event_occured_in_pcb_app) # selection change 있을 때 (나중에) 실행됨
@@ -95,12 +98,15 @@ class DaisyNetViewer(QWidget):
         self.ref_net_label = QLabel('Ref Net: Double click a net in the table.')
         self.ref_comp_label = QLabel('Ref Comp:')
         self.component_setting_button = QPushButton("Component Setting")
+        self.sort_button = QPushButton()
+        self.sort_button.setIcon(QIcon("asset/sort.png")) 
+        self.is_ascending = None  # None은 초기 상태
         self.fix_toggle = QToolButton()
         self.fix_toggle.setText("Fix Nets")
         self.fix_toggle.setCheckable(True)  # 토글 가능한 상태로 설정
         self.fix_toggle.setChecked(False)   # 초기 상태는 비활성화
         self.fix_toggle.setStyleSheet("font-size: 12px;")  # 텍스트 크기 설정
-        self.difference_button = QPushButton("Toggle Difference")
+        self.difference_button = QPushButton("Difference")
         self.difference_button.setCheckable(True)  # 토글 가능하도록 설정
         self.update_button = QPushButton("Update")
         self.update_button.setFixedSize(80, 30)  # 버튼 크기 설정
@@ -116,7 +122,7 @@ class DaisyNetViewer(QWidget):
         self.initial_setting()
         self.set_props()
 
-    @pyqtSlot()
+    @Slot()
     def event_occured_in_pcb_app(self):
         if not self.fix_toggle.isChecked():  # fix_toggle은 fix 토글을 나타내는 QWidget
             self._set_table_nets()
@@ -141,7 +147,7 @@ class DaisyNetViewer(QWidget):
         self.nets_table_widget.setHorizontalHeaderLabels(["Net Name"])
     
     def _set_layout(self):
-        layout = QVBoxLayout() # 세로 3칸칸
+        layout = QVBoxLayout() # 세로 3칸
 
         # ref 결정하는 세로 레이아웃
         ref_layout = QVBoxLayout()
@@ -156,7 +162,8 @@ class DaisyNetViewer(QWidget):
         top_button_layout = QHBoxLayout() # 버튼 가로 4칸
         top_button_layout.addLayout(ref_layout)
         top_button_layout.addStretch()
-        top_button_layout.addWidget(self.fix_toggle)    
+        top_button_layout.addWidget(self.fix_toggle)  
+        top_button_layout.addWidget(self.sort_button)
 
         # 업데이트 버튼
         update_layout = QHBoxLayout()
@@ -185,6 +192,7 @@ class DaisyNetViewer(QWidget):
         for i, net in enumerate(self.table_nets):
             self.nets_table_widget.insertRow(row_position + i)
             item = QTableWidgetItem(net.name)
+            item.setTextAlignment(Qt.AlignCenter) 
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             self.nets_table_widget.setItem(row_position + i, 0, item)
 
@@ -242,6 +250,22 @@ class DaisyNetViewer(QWidget):
         self.component_setting_button.clicked.connect(self.open_component_setting)
         self.difference_button.toggled.connect(self.toggle_difference)
         self.update_button.clicked.connect(self.update_data)
+        self.sort_button.clicked.connect(self.toggle_sort_order)
+    
+    def toggle_sort_order(self):
+        # 상태 변경
+        if self.is_ascending is None:
+            self.is_ascending = True  # 처음 클릭은 오름차순
+        else:
+            self.is_ascending = not self.is_ascending  # 상태 토글
+
+        # 상태에 따른 버튼 업데이트
+        if self.is_ascending:
+            self.sort_button.setIcon(QIcon("asset/asc.png"))  # 오름차순
+            self.nets_table_widget.sortItems(0, Qt.AscendingOrder)
+        else:
+            self.sort_button.setIcon(QIcon("asset/desc.png"))  # 내림차순
+            self.nets_table_widget.sortItems(0, Qt.DescendingOrder)
     
     def toggle_difference(self, checked):
         if checked:
@@ -318,7 +342,7 @@ class DaisyNetViewer(QWidget):
                     if item and item.text() == ref_net_name:
                         ref_net_row = row
                 
-                # 기준행 데이터 저장장
+                # 기준행 데이터 저장
                 ref_row_data = [
                         float(self.nets_table_widget.item(ref_net_row, col).text()) 
                         if self.nets_table_widget.item(ref_net_row, col).text() != '-' else '-'
@@ -332,14 +356,13 @@ class DaisyNetViewer(QWidget):
                         ref_item = ref_row_data[j-1]
                         dest_item = self.nets_table_widget.item(i, j).text()
                         if ref_item != '-' and dest_item != '-':
-                            difference = round(float(dest_item) - ref_item, 2)  
+                            difference = round(float(dest_item) - ref_item, 3)  
                             difference = str(difference)        
                         length_item = QTableWidgetItem(difference)
                         length_item.setTextAlignment(Qt.AlignCenter)
                         self.nets_table_widget.setItem(i, j, length_item)  
                                    
 if __name__ == "__main__":
-
     app = QApplication(sys.argv)
     viewer = DaisyNetViewer()
     viewer.show()
