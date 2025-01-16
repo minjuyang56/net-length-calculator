@@ -206,7 +206,11 @@ class DaisyNetViewer(QWidget):
         self.nets_table_widget.horizontalHeader().setSectionsMovable(True)
 
         # 표 length 데이터 세팅
-        for i, net in enumerate(self.table_nets):
+        for i in range(self.nets_table_widget.rowCount()):
+            net_name = self.nets_table_widget.item(i,0).text()
+            for net_candidate in self.table_nets:
+                if net_candidate.name == net_name:
+                    net = net_candidate
             for j, comp in enumerate(comp_set, start=1): # 컴포넌트 세트의 갯수만큼 돌림               
                 length_item = QTableWidgetItem(str(self.table_fromto[net.name][comp.Name]))
                 length_item.setTextAlignment(Qt.AlignCenter) 
@@ -270,6 +274,12 @@ class DaisyNetViewer(QWidget):
     def toggle_difference(self, checked):
         if checked:
             self.update_net_length_diff()
+            ref_net_name = self.ref_net_label.text().replace('Ref Net: ', '').strip()
+            for row in range(self.nets_table_widget.rowCount()):
+                item = self.nets_table_widget.item(row, 0)  # 첫 번째 컬럼 (Net name)
+                if item and item.text() == ref_net_name:
+                    column = self.ref_net_location[1]  # 원래의 column 위치를 가져옵니다.
+                    self.ref_net_location = (row, column)
             self.change_background(self.ref_net_location)
         else:
             self._set_table_fromto()
@@ -310,7 +320,11 @@ class DaisyNetViewer(QWidget):
                 if not comp_set:
                     self.show_warning('Set component first.')
                 else:
-                    for i, net in enumerate(self.table_nets):
+                    for i in range(self.nets_table_widget.rowCount()):
+                        net_name = self.nets_table_widget.item(i,0).text()
+                        for net_candidate in self.table_nets:
+                            if net_candidate.name == net_name:
+                                net = net_candidate
                         for j, comp in enumerate(comp_set, start=1): # 컴포넌트 세트의 갯수만큼 돌림               
                             length_item = QTableWidgetItem(str(self.table_fromto[net.name][comp.Name]))
                             length_item.setTextAlignment(Qt.AlignCenter) 
@@ -350,17 +364,36 @@ class DaisyNetViewer(QWidget):
                     ]
                 comp_set = self.net_calculator.comp_connection_cal.comp_set
                 # 표 length 데이터 세팅
-                for i, net in enumerate(self.table_nets):
-                    for j, comp in enumerate(comp_set, start=1): # 컴포넌트 세트의 갯수만큼 돌림림  
+                for i in range(self.nets_table_widget.rowCount()):
+                    net_name = self.nets_table_widget.item(i,0).text()
+                    for net_candidate in self.table_nets:
+                        if net_candidate.name == net_name:
+                            net = net_candidate
+                    for j, comp in enumerate(comp_set, start=1): # 컴포넌트 세트의 갯수만큼 돌림
                         difference = '-'
                         ref_item = ref_row_data[j-1]
                         dest_item = self.nets_table_widget.item(i, j).text()
                         if ref_item != '-' and dest_item != '-':
-                            difference = round(float(dest_item) - ref_item, 3)  
+                            difference = round(float(dest_item) - ref_item, self.net_calculator.get_current_precision())  
                             difference = str(difference)        
                         length_item = QTableWidgetItem(difference)
                         length_item.setTextAlignment(Qt.AlignCenter)
                         self.nets_table_widget.setItem(i, j, length_item)  
+    
+    def print_table(self):
+        row_count = self.nets_table_widget.rowCount()
+        col_count = self.nets_table_widget.columnCount()
+
+        for row in range(row_count):
+            row_data = []
+            for col in range(col_count):
+                item = self.nets_table_widget.item(row, col)
+                text = item.text() if item is not None else ''
+                row_data.append(text)
+            
+            print("\t".join(row_data))
+
+                
                                    
 if __name__ == "__main__":
     app = QApplication(sys.argv)
