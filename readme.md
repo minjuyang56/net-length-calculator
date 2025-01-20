@@ -9,7 +9,7 @@
 <img src="https://github.com/user-attachments/assets/76bb436c-2e2e-46cd-a7d5-413be9c67d21"  width="200"/>
 
 ### 1. 프로젝트 실행 흐름
-<img src="https://github.com/user-attachments/assets/98a0e445-0ce0-44cc-ba4c-cd381581066b" width="700" />
+<img src="https://github.com/user-attachments/assets/98a0e445-0ce0-44cc-ba4c-cd381581066b" width="500" />
 
 ### 2. `daisy_chain_length_main.py` 실행 시 화면
 <img src="https://github.com/user-attachments/assets/71d4afc8-7670-4704-ac07-74fb477e74cf" width="500" />
@@ -18,7 +18,7 @@
 <img src="https://github.com/user-attachments/assets/6da82628-f87b-4fee-8fef-c9a3eea40527" width="500" />
 
 ### 4. 네트 객체 더블 클릭 시 Ref Net 결정 화면
-<img src="https://github.com/user-attachments/assets/9b7c913f-4ba5-4c2c-adbd-fe5c8b2aa07e" width="300"/>
+<img src="https://github.com/user-attachments/assets/9b7c913f-4ba5-4c2c-adbd-fe5c8b2aa07e" width="500"/>
 
 ### 5. Difference 토글 활성화 시 화면
 <img src="https://github.com/user-attachments/assets/126edd82-8477-4aa1-a778-efd88f524166" width="500" />
